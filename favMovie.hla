@@ -1,0 +1,13 @@
+program favMovie;
+#include ("stdlib.hhf");
+begin favMovie;
+
+//too many movies to pick but a top movie of mine is shutter island
+
+stdout.put(" SSS   H   H   U   U  TTTTT  TTTTT  EEEEE RRRR   	 III  SSS   L       AAA   N   N  DDD  ",nl);
+stdout.put("S      H   H   U   U    T      T    E     R   R    	  I  S      L      A   A  NN  N  D  D ",nl);
+stdout.put(" SSS   HHHHH   U   U    T      T    EEEE  RRRR    	  I   SSS   L      AAAAA  N N N  D  D ",nl);
+stdout.put("    S  H   H   U   U    T      T    E     R   R   	  I      S  L      A   A  N  NN  D  D ",nl);
+stdout.put(" SSS   H   H    UUU     T      T    EEEEE R    RR  	 III  SSS   LLLLL  A   A  N   N  DDD ",nl);
+
+end favMovie;

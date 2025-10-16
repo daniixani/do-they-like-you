@@ -1,0 +1,64 @@
+program Jtable;
+#include ("stdhlib.hff");
+
+static
+	start: int32;
+	next: int32;
+
+begin Jtable;
+//getting initial number
+stdout.put("Enter a starting number: ", nl);
+stdin.geti();
+mov(EAX, start);
+mov(start, next); //saving starting number to next to be able to increment
+
+add(next,1); //incrementing starting number
+
+//row 1 just contains the og number input
+stdout.put(start, " ",start, " ",start, " ",start, " ",start, " ", nl);
+
+//row 2
+stdout.put( next, " " );  
+add( 1, next );
+stdout.put( start, " " );
+stdout.put( next, " " ); 
+
+add( 1, next );
+stdout.put( next );      
+add( 1, next );
+stdout.newln();
+
+//row 3
+stdout.put(next, " ", nl);
+add(1, next);
+
+stdout.put(next, " ", nl);
+add(1, next);
+
+stdout.put( start, " " );
+stdout.put( next, " " );  
+add( 1, next );
+stdout.put( next );   
+add( 1, next );
+stdout.newln();
+
+//row 4
+stdout.put( start, " " );
+stdout.put( next, " " ); 
+add( 1, next );
+stdout.put( start, " " );
+stdout.put( next, " " );
+add( 1, next );
+stdout.put( next );     
+add( 1, next );
+stdout.newln();
+
+//row 5
+stdout.put( start, " ", start, " ", start, " " );
+stdout.put( next, " " );  
+add( 1, next );
+stdout.put( next );     
+add( 1, next );
+stdout.newln();
+
+end Jtable;
