@@ -69,6 +69,103 @@ def _draw_latents(p: Params, rng: np.random.Generator):
     return ext, pho, com, car, opn
 
 
+# --- Friendly parsing helpers and presets ---------------------------------
+WORD_MAP = {
+    'low': 0.2,
+    'medium': 0.5,
+    'med': 0.5,
+    'high': 0.8,
+    'rare': 0.1,
+    'occasional': 0.4,
+    'often': 0.75,
+    'calm': 0.2,
+    'busy': 0.8,
+    'fast': 0.5,
+    'normal': 1.5,
+    'slow': 3.0,
+}
+
+PRESETS = {
+    'romantic': {
+        'comm_freq_mu': 0.8,
+        'care_base_mu': 0.9,
+        'openness_mu': 0.7,
+        'reply_delay_days': 0.5,
+    },
+    'casual': {
+        'comm_freq_mu': 0.45,
+        'care_base_mu': 0.35,
+        'openness_mu': 0.6,
+        'reply_delay_days': 2.0,
+    }
+}
+
+
+def _percent_to_float(s: str) -> float:
+    s = s.strip()
+    if s.endswith('%'):
+        return float(s[:-1]) / 100.0
+    return float(s)
+
+
+def parse_human_value(raw: str | None, param_name: str):
+    if raw is None:
+        return None
+    s = str(raw).strip().lower()
+    # numeric or percent
+    try:
+        if s.endswith('%'):
+            return _percent_to_float(s)
+        return float(s)
+    except Exception:
+        pass
+
+    # word mapping
+    if s in WORD_MAP:
+        if param_name in {'reply_delay_days'}:
+            return WORD_MAP[s]
+        return float(max(0.0, min(1.0, WORD_MAP[s])))
+
+    return None
+
+
+def describe_params(p: Params) -> str:
+    # Return a short, human-friendly description of key params
+    lines = [
+        f"Reply delay (days): {p.reply_delay_days} (larger = slower replies)",
+        f"Communication frequency (mu): {p.comm_freq_mu if hasattr(p, 'comm_freq_mu') else getattr(p, 'comm_freq_mu', 'N/A')}",
+        f"Care tendency (mu): {p.care_base_mu if hasattr(p, 'care_base_mu') else getattr(p, 'care_base_mu', 'N/A')}",
+        f"Openness (mu): {p.openness_mu if hasattr(p, 'openness_mu') else getattr(p, 'openness_mu', 'N/A')}",
+        f"Process noise: {p.process_sigma}",
+    ]
+    return "\n".join(lines)
+
+
+def _build_params_from_args(args) -> Params:
+    base = dataclasses.asdict(Params())
+    overrides = {}
+    if getattr(args, 'preset', None):
+        ps = PRESETS.get(args.preset.lower())
+        if ps:
+            overrides.update(ps)
+    for name in ('comm_freq_mu', 'care_base_mu', 'openness_mu'):
+        raw = getattr(args, name, None)
+        if raw is not None:
+            v = parse_human_value(raw, name)
+            if v is not None:
+                overrides[name] = v
+    if getattr(args, 'reply_delay_days', None) is not None:
+        rd = parse_human_value(args.reply_delay_days, 'reply_delay_days')
+        if rd is not None:
+            overrides['reply_delay_days'] = rd
+    # include N/T if provided
+    if getattr(args, 'N', None) is not None:
+        overrides['N'] = args.N
+    if getattr(args, 'T', None) is not None:
+        overrides['T'] = args.T
+    return Params(**{**base, **overrides})
+
+
 def _simulate_one(p: Params, rng: np.random.Generator, init_x: float) -> str:
     ext, pho, com, car, opn = _draw_latents(p, rng)
 
@@ -144,12 +241,34 @@ def monte_carlo(p: Params, seed: int, init_x: float) -> Dict[str, float]:
 
 
 def cmd_run(args):
-    p = Params(
-        N=args.N,
-        T=args.T,
-        reply_delay_days=args.reply_delay_days,
-        delay_decay_per_day=args.delay_decay_per_day,
-    )
+    # build Params with optional preset and friendly overrides
+    base = dataclasses.asdict(Params())
+    overrides = {}
+    if getattr(args, 'preset', None):
+        ps = PRESETS.get(args.preset.lower())
+        if ps:
+            overrides.update(ps)
+
+    # friendly parsing for certain fields
+    for name in ('comm_freq_mu', 'care_base_mu', 'openness_mu'):
+        raw = getattr(args, name, None)
+        if raw is not None:
+            v = parse_human_value(raw, name)
+            if v is not None:
+                overrides[name] = v
+
+    # reply delay special handling
+    if getattr(args, 'reply_delay_days', None) is not None:
+        rd = parse_human_value(args.reply_delay_days, 'reply_delay_days')
+        if rd is not None:
+            overrides['reply_delay_days'] = rd
+
+    # numeric overrides
+    overrides['N'] = args.N
+    overrides['T'] = args.T
+    overrides['delay_decay_per_day'] = args.delay_decay_per_day
+
+    p = Params(**{**base, **overrides})
 
     res = monte_carlo(p, seed=args.seed, init_x=args.init_x)
     print("Parameters:", dataclasses.asdict(p))
@@ -168,12 +287,19 @@ def cmd_sweep(args):
 
     rows: List[Dict[str, float]] = []
     for dd in delays:
-        p = Params(
-            N=args.N,
-            T=args.T,
-            reply_delay_days=dd,
-            delay_decay_per_day=args.delay_decay_per_day,
-        )
+        # allow presets/overrides like in run
+        base = dataclasses.asdict(Params())
+        overrides = {}
+        if getattr(args, 'preset', None):
+            ps = PRESETS.get(args.preset.lower())
+            if ps:
+                overrides.update(ps)
+        overrides['reply_delay_days'] = dd
+        overrides['N'] = args.N
+        overrides['T'] = args.T
+        overrides['delay_decay_per_day'] = args.delay_decay_per_day
+
+        p = Params(**{**base, **overrides})
         res = monte_carlo(p, seed=args.seed, init_x=args.init_x)
         row = {"delay_days": dd, **res}
         rows.append(row)
@@ -209,8 +335,17 @@ def _build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--init_x", type=float, default=0.5)
     p_run.add_argument("--N", type=int, default=10000)
     p_run.add_argument("--T", type=int, default=8)
-    p_run.add_argument("--reply_delay_days", type=float, default=1.5)
+    p_run.add_argument("--reply_delay_days", type=str, default=None,
+                       help="reply delay in days (float) or friendly words like fast/slow or '1.5'")
     p_run.add_argument("--delay_decay_per_day", type=float, default=0.25)
+    p_run.add_argument("--preset", type=str, default=None,
+                       help="preset name (romantic, casual)")
+    p_run.add_argument("--comm_freq_mu", type=str, default=None,
+                       help="communication frequency (0..1, 0.5, 50%, or words 'rare/occasional/often')")
+    p_run.add_argument("--care_base_mu", type=str, default=None,
+                       help="care tendency (0..1, percent, or words)")
+    p_run.add_argument("--openness_mu", type=str, default=None,
+                       help="openness (0..1, percent, or words)")
     p_run.set_defaults(func=cmd_run)
 
     p_sweep = sub.add_parser("sweep", help="Sweep reply delay and save CSV")
@@ -223,9 +358,21 @@ def _build_parser() -> argparse.ArgumentParser:
     p_sweep.add_argument("--init_x", type=float, default=0.5)
     p_sweep.add_argument("--N", type=int, default=10000)
     p_sweep.add_argument("--T", type=int, default=8)
-    p_sweep.add_argument("--reply_delay_days", type=float, default=1.5)
+    p_sweep.add_argument("--reply_delay_days", type=str, default=None,
+                         help="reply delay in days; accepts friendly values as in run")
     p_sweep.add_argument("--delay_decay_per_day", type=float, default=0.25)
     p_sweep.set_defaults(func=cmd_sweep)
+
+    p_desc = sub.add_parser(
+        "describe", help="Print a human-friendly summary of params")
+    p_desc.add_argument("--preset", type=str, default=None,
+                        help="apply preset before describing")
+    p_desc.add_argument("--comm_freq_mu", type=str, default=None)
+    p_desc.add_argument("--care_base_mu", type=str, default=None)
+    p_desc.add_argument("--openness_mu", type=str, default=None)
+    p_desc.add_argument("--reply_delay_days", type=str, default=None)
+    p_desc.set_defaults(func=lambda args: print(
+        describe_params(_build_params_from_args(args))))
 
     return parser
 
